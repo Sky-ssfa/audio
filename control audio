@@ -1,0 +1,82 @@
+#include "Arduino.h"
+#include "Audio.h"
+#include "SD.h"
+#include "FS.h"
+
+Audio audio;
+
+bool isPlaying = false;
+File song;   // Para almacenar el archivo de la canción
+int songIndex = 0;  // control de las canciones
+String songPath = "/songs/";  // Ruta donde están las canciones (cambienlo al nombre de la carpeta donde guarden los audios de ustedes!)
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  if (!SD.begin(5)) {
+    Serial.println("Error al inicializar la tarjeta SD");
+    while (1);
+  }
+
+  audio.setPinout(26, 25, 22); // BCLK, LRC, DIN (Verifiquen si son esos pines los que tienen definidos)
+  audio.setVolume(21);         // Volumen entre 0 y 21 (21 es el máximo, pero si lo necesitan más fuerte, les recomiendo ajustar los audios con una app que se llama audacity si aplica obvio)
+
+  Serial.println("Comandos: play, pause, stop");
+
+  // Abrir la carpeta para leer los archivos
+  File dir = SD.open(songPath);
+  if (!dir) {
+    Serial.println("No se pudo abrir la carpeta de canciones.");
+    while (1);
+  }
+}
+
+void playNextSong() {
+  // Cambiar al siguiente archivo en la carpeta
+  String songFileName = "/songs/cancion" + String(songIndex + 1) + ".wav";  // En mi caso, los archivos tienen nombres como cancio1.wav, cancion2.wav y así, esta parte depende de cómo los estén guardando en la microsd
+
+  // Abrir el archivo de la siguiente canción
+  song = SD.open(songFileName);
+
+  if (song) {
+    Serial.println("Reproduciendo: " + songFileName);
+    audio.connecttoFS(SD, songFileName.c_str());  // Usamos el sistema de archivos SD y la ruta completa
+    isPlaying = true;
+    songIndex++;
+  } else {
+    Serial.println("No se pudo abrir el archivo: " + songFileName);
+  }
+}
+
+void loop() {
+  audio.loop();
+
+  if (Serial.available()) {
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+
+    if (cmd == "play") {
+      // Comenzar a reproducir las canciones desde el principio
+      songIndex = 0;
+      playNextSong();
+    } else if (cmd == "pause") {
+      if (isPlaying) {
+        audio.pauseResume();
+      }
+    } else if (cmd == "stop") {
+      audio.stopSong();
+      isPlaying = false;
+    }
+  }
+
+  // Si terminó la canción actual, reproducir la siguiente
+  if (!isPlaying) {  // Cambié la condición aquí para usar isPlaying directamente
+    if (songIndex < 8) {  // Suponiendo que hay 5 canciones (ajustar según el número de canciones que tengas)
+      playNextSong();  // Reproducir la siguiente canción
+    } else {
+      // Si se han reproducido todas las canciones, volver al principio (opcional)
+      songIndex = 0;
+    }
+  }
+}
